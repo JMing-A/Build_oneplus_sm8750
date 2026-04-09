@@ -54,63 +54,20 @@
 
 1. 进入你 Fork 的仓库
 2. 点击 **Actions** 标签页
-3. 选择 **`Build_oneplus_sm8750`** 工作流
+3. 选择对应的工作流（见下方说明）
 4. 点击 **Run workflow** 按钮
 5. 填写编译参数
 6. 等待编译完成（首次构建约12分钟）
 7. 在 **Artifacts** 中下载编译产物
----
 
-### 方式二：本地 WSL2 编译
+### 📋 可用工作流
 
-> ⚠️ **注意**: 本地脚本需要一定的 Linux 使用经验，推荐新手使用 GitHub Actions 云编译。
-
-#### 环境要求
-
-- **WSL2**: Ubuntu 20.04 或更高版本
-- **磁盘空间**: 至少 50GB（推荐 80GB+）
-- **内存**: 最低 8GB（推荐 16GB+）
-- **网络**: 能稳定访问 GitHub
-
-#### 编译步骤
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/showdo/Build_Oneplus_Realme_Action.git
-cd Build_Oneplus_Realme_Action
-
-# 2. 添加执行权限
-chmod +x Build_sm8750_local.sh
-
-# 3. 运行脚本
-./Build_sm8750_local.sh
-```
-
-#### WSL2 磁盘迁移教程（可选）
-
-如果 C 盘空间不足，可将 WSL2 迁移到其他盘：
-
-```powershell
-# 以管理员身份运行 PowerShell
-
-# 1. 查看 WSL 版本
-wsl -l -v
-
-# 2. 停止 WSL
-wsl --shutdown
-
-# 3. 导出 Ubuntu（替换为你的发行版名称）
-wsl --export Ubuntu-20.04 E:/ubuntu.tar
-
-# 4. 注销原发行版
-wsl --unregister Ubuntu-20.04
-
-# 5. 导入到新位置
-wsl --import Ubuntu-20.04 E:\ubuntu\ E:\ubuntu.tar --version 2
-
-# 6. 设置默认用户
-ubuntu2004.exe config --default-user <your_username>
-```
+| 工作流 | 说明 | 适用场景 |
+|--------|------|----------|
+| [Build_oneplus_sm8750](.github/workflows/Build_oneplus_sm8750.yml) | 完整内核编译（含 KSU/SUSFS 等） | 集成KSU获取ROOT |
+| [Build_kernel_only](.github/workflows/Build_kernel_only.yml) | 无 Root 官方源码编译 | 仅需官方内核，不集成 KSU |
+| [clean-caches](.github/workflows/clean-caches.yml) | 清理 ccache 缓存 | 缓存异常或需要重新编译时 |
+| [Clear_All_Workflow](.github/workflows/Clear_All_Workflow.yml) | 清理工作流运行记录 | 保证Action界面整洁
 
 ---
 
@@ -123,7 +80,7 @@ ubuntu2004.exe config --default-user <your_username>
 
 #### 清理旧缓存
 
-当构建时间超过 8 分钟时，会自动清理旧的 ccache 缓存，避免占用过多 GitHub 存储空间。
+当构建时间超过 8 分钟时，会自动清理旧的 ccache 缓存，避免占用过多 GitHub 存储空间。也可手动运行 [clean-caches](.github/workflows/clean-caches.yml) 工作流清理全部缓存。
 
 ---
 

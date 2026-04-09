@@ -54,65 +54,20 @@ Click the **Fork** button in the upper right corner to copy this repository to y
 
  1. Go to your forked repository
  2. Click the **Actions** tab
- 3. Select **`Build_oneplus_sm8750`** workflow
+ 3. Select the corresponding workflow (see table below)
  4. Click **Run workflow** button
  5. Fill in compilation parameters
  6. Wait for compilation to complete (approximately 12 minutes for first build)
  7. Download build artifacts from **Artifacts** section
 
+### 📋 Available Workflows
 
----
-
-### Method 2: Local WSL2 Build
-
-> ⚠️ **Note**: Local scripts require some Linux experience. Beginners are recommended to use GitHub Actions cloud build.
-
-#### Requirements
-
-- **WSL2**: Ubuntu 20.04 or higher
-- **Disk Space**: At least 50GB (80GB+ recommended)
-- **Memory**: Minimum 8GB (16GB+ recommended)
-- **Network**: Stable access to GitHub
-
-#### Build Steps
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/showdo/Build_Oneplus_Realme_Action.git
-cd Build_Oneplus_Realme_Action
-
-# 2. Add execute permission
-chmod +x Build_sm8750_local.sh
-
-# 3. Run the script
-./Build_sm8750_local.sh
-```
-
-#### WSL2 Disk Migration (Optional)
-
- If C drive space is insufficient, you can migrate WSL2 to another drive:
-
-```powershell
-# Run PowerShell as Administrator
-
-# 1. Check WSL version
-wsl -l -v
-
-# 2. Stop WSL
-wsl --shutdown
-
-# 3. Export Ubuntu (replace with your distro name)
-wsl --export Ubuntu-20.04 E:/ubuntu.tar
-
-# 4. Unregister original distro
-wsl --unregister Ubuntu-20.04
-
-# 5. Import to new location
-wsl --import Ubuntu-20.04 E:\ubuntu\ E:\ubuntu.tar --version 2
-
-# 6. Set default user
-ubuntu2004.exe config --default-user <your_username>
-```
+| Workflow | Description | Use Case |
+|----------|-------------|----------|
+| [Build_oneplus_sm8750](.github/workflows/Build_oneplus_sm8750.yml) | Full kernel build (with KSU/SUSFS etc.) |
+| [Build_kernel_only](.github/workflows/Build_kernel_only.yml) | Official source build without Root | Stock kernel without KSU integration |
+| [clean-caches](.github/workflows/clean-caches.yml) | Clean ccache caches | When cache is corrupted or needs rebuild |
+| [Clear_All_Workflow](.github/workflows/Clear_All_Workflow.yml) | Clean workflow run records | Keep Actions page tidy |
 
 ---
 
@@ -126,7 +81,7 @@ ubuntu2004.exe config --default-user <your_username>
 
  #### Cleaning Old Cache
 
- When build time exceeds 8 minutes, old ccache caches are automatically cleaned to avoid excessive GitHub storage usage.
+ When build time exceeds 8 minutes, old ccache caches are automatically cleaned to avoid excessive GitHub storage usage. You can also manually run the [clean-caches](.github/workflows/clean-caches.yml) workflow to clear all caches.
 
  ---
 
