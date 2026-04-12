@@ -378,15 +378,29 @@ jobs:
 
       - name: 🔧 Add Re-Kernel Support (添加Re-Kernel支持)
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
-        working-directory: kernel_workspace/common
         run: |
-          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/Bin/Re-Kernel_Support.patch"
-          cp "$PATCH_FILE" ./
-          patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/rk.log || true
-          rm -f Re-Kernel_Support.patch
-          echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
-          echo "✅ Re-Kernel配置已注入"
+          cd kernel_workspace
+          VERSION=$(awk -F'=' '/^VERSION[ \t]*=/ {gsub(/ /,"",$2); print $2}' common/Makefile)
+          PATCHLEVEL=$(awk -F'=' '/^PATCHLEVEL[ \t]*=/ {gsub(/ /,"",$2); print $2}' common/Makefile)
+          echo "内核版本: ${VERSION}.${PATCHLEVEL}"
+          [ ! -d "Re-Kernel" ] && git clone --depth 1 https://github.com/Sakion-Team/Re-Kernel.git
+          RE_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Re-Kernel/LKM-Source"
+          cd common
+          grep -q 'source "drivers/rekernel/Kconfig"' drivers/Kconfig || \
+            sed -i '/endmenu/i source "drivers/rekernel/Kconfig"' drivers/Kconfig
+          grep -q 'obj-$(CONFIG_REKERNEL)' drivers/Makefile || \
+            printf '\n# Re-Kernel\nobj-$(CONFIG_REKERNEL) += rekernel/\n' >> drivers/Makefile
+          mkdir -p drivers/rekernel
+          cp ${RE_DIR}/* drivers/rekernel/
+          TARGET="KERNEL_${VERSION}_${PATCHLEVEL}"
+          if grep -q "$TARGET" drivers/rekernel/rekernel.h; then
+            sed -i "s|^[[:space:]]*//[[:space:]]*#define[[:space:]]\+$TARGET|#define $TARGET|" drivers/rekernel/rekernel.h
+            echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
+            echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
+            echo "✅ Re-Kernel 配置完成"
+          else
+            echo "⚠️ 不支持的内核版本: $TARGET"
+          fi
 
       - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler 支持)
         working-directory: kernel_workspace/common
@@ -394,6 +408,8 @@ jobs:
           echo "开始添加 ADIOS I/O 调度器支持..."
           if [ "${{ env.KERNEL_VERSION }}" = "6.1.115(天玑)" ]; then
             PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/Bin/adios_ioscheduler_6.1_mt6989.patch"
+          elif [ "${{ env.KERNEL_VERSION }}" = "6.1.57" ] || [ "${{ env.KERNEL_VERSION }}" = "6.1.75" ]; then
+            PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/Bin/adios_ioscheduler_6.1_old.patch"
           else
             PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/Bin/adios_ioscheduler_6.1.patch"
           fi
@@ -663,7 +679,7 @@ jobs:
         
       - name: 📦 Make AnyKernel3 (创建Anykernel3)
         run: |
-          cp "${GITHUB_WORKSPACE}/.github/workflows/Bin/main.bin" ./
+          cp "${GITHUB_WORKSPACE}/.github/workflows/Bin//main.bin" ./
           chmod +x main.bin
           ./main.bin "make_anykernel3"
           rm -rf ./main.bin
@@ -674,9 +690,14 @@ jobs:
          name: AK3_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_TG@qdykernel
          path: ./AnyKernel3/*
 
+  upload_rekernel:
+    name: Upload Re-Kernel Module
+    if: ${{ github.event.inputs.enable_ReKernel == 'true' }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
         id: download-rekernel
-        if: ${{ env.ENABLE_REKERNEL == 'true' }}
         uses: actions/github-script@v8
         env:
           KERNEL_MAJOR: "6.1"
@@ -694,12 +715,15 @@ jobs:
             });
             core.info(`最新版本: ${release.data.tag_name}`);
             const escapedKernel = kernelMajor.replace(/\./g, '\\.');
-            const pattern = new RegExp(`^Re-Kernel-v[\\d.]+-${escapedKernel}\\.zip$`);
+            const pattern = new RegExp(`^Re-Kernel-v([\\d.]+)-${escapedKernel}\\.zip$`);
 
             let targetAsset = null;
+            let versionNumber = '';
             for (const asset of release.data.assets || []) {
-              if (pattern.test(asset.name)) {
+              const match = asset.name.match(pattern);
+              if (match) {
                 targetAsset = asset;
+                versionNumber = match[1]; // 提取版本号部分
                 break;
               }
             }
@@ -709,22 +733,22 @@ jobs:
               return;
             }
 
-            core.info(`找到目标资产: ${targetAsset.name} (${(targetAsset.size / 1024).toFixed(1)} KB)`);
+            core.info(`找到目标资产: ${targetAsset.name} (版本: ${versionNumber}, ${(targetAsset.size / 1024).toFixed(1)} KB)`);
             core.setOutput('asset-name', targetAsset.name);
             core.setOutput('download-url', targetAsset.browser_download_url);
-            core.setOutput('tag-name', release.data.tag_name);
+            core.setOutput('version-number', versionNumber);
 
       - name: 📥 Download Re-Kernel module (下载 Re-Kernel 模块)
-        if: ${{ env.ENABLE_REKERNEL == 'true' }}
-        working-directory: kernel_workspace
         env:
           ASSET_NAME: ${{ steps.download-rekernel.outputs.asset-name }}
           DOWNLOAD_URL: ${{ steps.download-rekernel.outputs.download-url }}
-          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1
+          VERSION_NUMBER: ${{ steps.download-rekernel.outputs.version-number }}
         run: |
           set -euo pipefail
+          ARTIFACT_NAME="Re-Kernel-v${VERSION_NUMBER}-6.1"
           echo "正在下载 Re-Kernel 模块: $ASSET_NAME"
           echo "下载地址: $DOWNLOAD_URL"
+          echo "Artifact 名称: $ARTIFACT_NAME"
           aria2c -s16 -x16 -k1M "$DOWNLOAD_URL" -o "$ASSET_NAME"
           echo "✓ Re-Kernel 模块下载完成"
           ls -lh "$ASSET_NAME"
@@ -735,8 +759,7 @@ jobs:
           ls -lR "$ARTIFACT_NAME"
 
       - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
-        if: ${{ env.ENABLE_REKERNEL == 'true' }}
         uses: actions/upload-artifact@v5
         with:
-          name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1
-          path: kernel_workspace/Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1
+          name: Re-Kernel-v${{ steps.download-rekernel.outputs.version-number }}-6.1
+          path: Re-Kernel-v${{ steps.download-rekernel.outputs.version-number }}-6.1
